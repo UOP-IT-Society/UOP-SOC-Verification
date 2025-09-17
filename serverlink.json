@@ -5,8 +5,13 @@
     "controlServerID": "1417843336592752690"
   },
   {
-    "name": "Test Server",
-    "serverID": "123456789012345678",
+    "name": "Rock",
+    "serverID": "1149696552898670683",
+    "controlServerID": "1417845296624439386"
+  },
+  {
+    "name": "Aviation",
+    "serverID": "1344712664554668265",
     "controlServerID": "876543210987654321"
   }
 ]
