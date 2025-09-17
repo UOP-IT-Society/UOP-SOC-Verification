@@ -10,6 +10,7 @@ intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 check_channel_id = 1417565908695646321  # Replace with your channel ID
+roleid = 897543335277916200  # Replace with your role ID
 
 # Database setup
 conn = sqlite3.connect('discorduserlinks.db')
