@@ -121,7 +121,9 @@ async def verify(ctx, code: str):
         role = ctx.guild.get_role(roleid)
         student_role = discord.utils.get(ctx.guild.roles, name=is_student_role)
         await ctx.author.add_roles(role, student_role)
-        await ctx.send(f'Student Verification successful! Starting Membership Verification, {ctx.author.mention}.')
+        x = await ctx.send(f'Student Verification successful! Starting Membership Verification, {ctx.author.mention}.')
+        time.sleep(10)
+        await x.delete()
     else:
         await ctx.send(f'Invalid verification code, {ctx.author.mention}. Please try again.')
 
