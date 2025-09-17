@@ -1,0 +1,3 @@
+aiosmtp
+py-cord
+python-dotenv
