@@ -87,7 +87,7 @@ async def on_message(message):
         discord_name = str(message.author)
         discord_id = str(message.author.id)
         if send_email(email_address, verifycode, discord_name, discord_id):
-            await message.channel.send(f'A verification code has been sent to your email {email_address}, {message.author.mention}. Please check your email and use the !verify command followed by the code to complete the verification process. Example: !verify {verifycode}.  Note: It may take a few minutes for the email to arrive and please check your spam/junk folder.')
+            await message.channel.send(f'A verification code has been sent to your email {email_address}, {message.author.mention}. Please check your email and use the !verify command followed by the code to complete the verification process. Example: !verify 77631.  Note: It may take a few minutes for the email to arrive and please check your spam/junk folder.')
         else:
             await message.channel.send(f'Failed to send verification email to, {message.author.mention}. Please contact an admin.')
 
