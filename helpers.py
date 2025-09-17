@@ -25,18 +25,20 @@ def send_email(receiver_email, code, discord_name, discord_id):
     em['Subject'] = subject
     em.set_content(body)
 
-    # Add SSL for security
     context = ssl.create_default_context()
 
     try:
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=context) as smtp:
+        # Use the standard SMTP class for port 587
+        with smtplib.SMTP('smtp.gmail.com', 587) as smtp:
+            # Upgrade the plain text connection to a secure one
+            smtp.starttls(context=context)
+            
             smtp.login(email_sender, email_password)
             smtp.sendmail(email_sender, email_receiver, em.as_string())
         return True
     except Exception as e:
         print(f"Error sending email: {e}")
         return False
-
 
 import json
 
