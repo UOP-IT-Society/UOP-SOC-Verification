@@ -3,7 +3,7 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 
-def send_email(receiver_email, code, discord_name, discord_id):
+async def send_email(receiver_email, code, discord_name, discord_id):
     """Sends the verification code to the user's email."""
     email_sender = os.getenv('EMAIL_USER')
     email_password = os.getenv('EMAIL_PASS')
