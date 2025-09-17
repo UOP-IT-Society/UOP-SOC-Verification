@@ -2,7 +2,7 @@ import discord
 import csv
 import sqlite3
 import os
-from helpers import send_email
+from helpers import send_email, get_control_server_id
 
 from discord.ext import commands
 
@@ -13,6 +13,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 check_channel_id = 1417565908695646321  # Replace with your channel ID
 roleid = 897543335277916200  # Replace with your role ID
 is_student_role = "is_student"
+Control_Server = 1417843105524088834  
 
 # Database setup
 conn = sqlite3.connect('discorduserlinks.db')
@@ -38,23 +39,44 @@ async def on_message(message):
 
     if message.channel.id != check_channel_id:
         return
+        
+    # We want to process commands, so this should be at the end.
+    # await bot.process_commands(message) 
 
     print(f'Message from {message.author}: {message.content}')
-    #a message in the form of upxxxxxxxxx where x is a digit is expected check if the number can be found in the csv file called members.csv
-    if message.content.startswith('up')  and message.content[2:].isdigit():
+    
+    if message.content.startswith('up') and message.content[2:].isdigit():
         upid = message.content.replace("up", "").strip()
-
-        #check if the user is already verified
+        
+        # Check if the user is already verified
         c.execute("SELECT * FROM user_links WHERE discord_id = ?", (str(message.author.id),))
         if c.fetchone():
-            await message.channel.send(f'You are already verified as a student. {message.author.mention}.')
+            await message.channel.send(f'You are already verified as a student, {message.author.mention}.')
             student_role = discord.utils.get(message.guild.roles, name=is_student_role)
-            await message.author.add_roles(student_role)
+            if student_role:
+                await message.author.add_roles(student_role)
+            await message.delete()
             return
         
+        # Check if that up number has already been used
+        c.execute("SELECT * FROM user_links WHERE upid = ?", (upid,))
+        if c.fetchone():
+            await message.channel.send(f'That UP number has already been used for verification, {message.author.mention}. If you believe this is an error, please contact an admin.')
+            
+            
+            tosendServer = await bot.fetch_guild(Control_Server)
+            if tosendServer:
+                print(f"Successfully found control server: {tosendServer.name}")
+                tosendChannelid = get_control_server_id(str(message.guild.id))
+                tosendChannelid = await tosendServer.fetch_channel(tosendChannelid)
+                #send message to control server
+                if tosendChannelid:
+                    await tosendChannelid.send(f'Alert: The UP number {upid} has been attempted for verification again by {message.author} (ID: {message.author.id}) in server {message.guild.name} (ID: {message.guild.id}). Please investigate for potential misuse.')
+                
+            await message.delete()
+            return
 
-        
-        verifycode = str(os.urandom(3).hex())  # Generate a random 6-character hex code
+        verifycode = str(os.urandom(5).hex())  # Generate a random 6-character hex code
         print("Generated code:", verifycode)
         print("Please check your email for the verification code.")
         c.execute("INSERT OR REPLACE INTO pending_verifications (discord_id, upid, code) VALUES (?, ?, ?)", (str(message.author.id), upid, verifycode))
@@ -62,10 +84,18 @@ async def on_message(message):
 
         #send email to the user with the code
         email_address = f"up{upid}@myport.ac.uk"
-        if send_email(email_address, verifycode):
-            await message.channel.send(f'A verification code has been sent to your email {email_address}, {message.author.mention}. Please check your email and use the !verify command followed by the code to complete the verification process. Example: !verify {verifycode}')
+        discord_name = str(message.author)
+        discord_id = str(message.author.id)
+        if send_email(email_address, verifycode, discord_name, discord_id):
+            await message.channel.send(f'A verification code has been sent to your email {email_address}, {message.author.mention}. Please check your email and use the !verify command followed by the code to complete the verification process. Example: !verify {verifycode}.  Note: It may take a few minutes for the email to arrive and please check your spam/junk folder.')
         else:
             await message.channel.send(f'Failed to send verification email to, {message.author.mention}. Please contact an admin.')
+
+    
+    try:
+        await message.delete()
+    except discord.Forbidden:
+        print("Failed to delete message, missing permissions.")
     #process commands after on_message
     await bot.process_commands(message)
 

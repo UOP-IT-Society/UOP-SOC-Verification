@@ -3,7 +3,7 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 
-def send_email(receiver_email, code):
+def send_email(receiver_email, code, discord_name, discord_id):
     """Sends the verification code to the user's email."""
     email_sender = os.getenv('EMAIL_USER')
     email_password = os.getenv('EMAIL_PASS')
@@ -11,7 +11,7 @@ def send_email(receiver_email, code):
 
     subject = "Your Discord Verification Code"
     body = f"""
-    Hello,
+    Hello {discord_name}, ID: {discord_id},
 
     Your verification code for the Discord server is: {code}
 
@@ -36,3 +36,38 @@ def send_email(receiver_email, code):
     except Exception as e:
         print(f"Error sending email: {e}")
         return False
+
+
+import json
+
+def load_config(filename='serverlink.json'):
+    """Loads the configuration from a JSON file."""
+    try:
+        with open(filename, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print(f"Error: The file '{filename}' was not found.")
+        return [] # Return an empty list on error
+
+# Load the configuration data once when the script starts
+server_configs = load_config()
+
+def get_control_server_id(server_id_to_find: str) -> str | None:
+    """
+    Finds a server object by its ID and returns the control server ID.
+
+    Args:
+        server_id_to_find: The serverID to search for.
+
+    Returns:
+        The controlServerID as a string if a match is found, otherwise None.
+    """
+    # Loop through each server configuration in the list
+    for config in server_configs:
+        # Check if the 'serverID' in the current config matches the one we're looking for
+        if config.get("serverID") == server_id_to_find:
+            # If it matches, return the corresponding 'controlServerID'
+            return config.get("controlServerID")
+    
+    # If the loop finishes without finding a match, return None
+    return None
