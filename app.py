@@ -2,6 +2,7 @@ import discord
 import csv
 import sqlite3
 import os
+import time
 from helpers import send_email, get_control_server_id
 
 from discord.ext import commands
@@ -61,7 +62,7 @@ async def on_message(message):
         # Check if that up number has already been used
         c.execute("SELECT * FROM user_links WHERE upid = ?", (upid,))
         if c.fetchone():
-            await message.channel.send(f'That UP number has already been used for verification, {message.author.mention}. If you believe this is an error, please contact an admin.')
+            x = await message.channel.send(f'That UP number has already been used for verification, {message.author.mention}. If you believe this is an error, please contact an admin.')
             
             
             tosendServer = await bot.fetch_guild(Control_Server)
@@ -87,10 +88,12 @@ async def on_message(message):
         discord_name = str(message.author)
         discord_id = str(message.author.id)
         if send_email(email_address, verifycode, discord_name, discord_id):
-            await message.channel.send(f'A verification code has been sent to your email {email_address}, {message.author.mention}. Please check your email and use the !verify command followed by the code to complete the verification process. Example: !verify 77631.  Note: It may take a few minutes for the email to arrive and please check your spam/junk folder.')
+            x = await message.channel.send(f'A verification code has been sent to your email {email_address}, {message.author.mention}. Please check your email and use the !verify command followed by the code to complete the verification process. Example: !verify 77631.  **Note: It may take a few minutes for the email to arrive and please check your spam/junk folder.**')
         else:
-            await message.channel.send(f'Failed to send verification email to, {message.author.mention}. Please contact an admin.')
+            x = await message.channel.send(f'Failed to send verification email to, {message.author.mention}. Please contact an admin.')
 
+        time.sleep(60)
+        await x.delete()
     
     try:
         await message.delete()
