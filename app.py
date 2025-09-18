@@ -3,7 +3,7 @@ import csv
 import sqlite3
 import os
 import time
-from helpers import send_email, get_control_server_id
+from helpers import send_email, get_control_server_id, is_verification_channel
 
 from discord.ext import commands
 
@@ -11,7 +11,6 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-check_channel_id = 1417565908695646321  # Replace with your channel ID
 roleid = 897543335277916200  # Replace with your role ID
 is_student_role = "is_student"
 Control_Server = 1417843105524088834  
@@ -38,7 +37,7 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
-    if message.channel.id != check_channel_id:
+    if is_verification_channel(message.channel.id):
         return
         
     # We want to process commands, so this should be at the end.
@@ -105,7 +104,7 @@ async def on_message(message):
 @bot.command()
 async def verify(ctx, code: str):
     """Verifies the user with the provided code."""
-    if ctx.channel.id != check_channel_id:
+    if is_verification_channel(ctx.channel.id):
         return
 
     c.execute("SELECT upid FROM pending_verifications WHERE discord_id = ? AND code = ?", (str(ctx.author.id), code))

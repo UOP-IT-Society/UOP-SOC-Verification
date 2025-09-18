@@ -73,3 +73,21 @@ def get_control_server_id(server_id_to_find: str) -> str | None:
     
     # If the loop finishes without finding a match, return None
     return None
+
+def is_verification_channel(channel_id_to_check: str) -> bool:
+    """
+    Checks if the given channel ID is the verification channel for the specified server ID.
+
+    Args:
+        channel_id_to_check: The channel ID to check.
+    Returns:
+        True if the channel ID matches the verification channel for the server, otherwise False.
+    """
+
+    for config in server_configs:
+        try:
+            if config.get("verificationChannelID") == channel_id_to_check:
+                return True
+        except KeyError:
+            continue
+    return False
