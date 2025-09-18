@@ -37,7 +37,8 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
-    if is_verification_channel(message.channel.id):
+    if not is_verification_channel(message.channel.id):
+        await bot.process_commands(message)
         return
         
     # We want to process commands, so this should be at the end.
@@ -104,7 +105,7 @@ async def on_message(message):
 @bot.command()
 async def verify(ctx, code: str):
     """Verifies the user with the provided code."""
-    if is_verification_channel(ctx.channel.id):
+    if not is_verification_channel(ctx.channel.id):
         return
 
     c.execute("SELECT upid FROM pending_verifications WHERE discord_id = ? AND code = ?", (str(ctx.author.id), code))
