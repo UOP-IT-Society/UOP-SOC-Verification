@@ -47,7 +47,6 @@ async def on_message(message):
     # --- VERIFICATION LOGIC (only runs in verification channels) ---
     
     # Delete the user's message (e.g., "up123456") to keep the channel clean
-    # We do this first so it's deleted even if there's an error.
     try:
         await message.delete()
     except discord.Forbidden:
@@ -96,6 +95,22 @@ async def on_message(message):
         else:
             await message.channel.send(f'Failed to send verification email. Please contact an admin.', delete_after=30)
     
+
+# Check if this account has already been verified when joining a server
+@bot.event
+async def on_member_join(member):
+    c.execute("SELECT upid FROM user_links WHERE discord_id = ?", (str(member.id),))
+    result = c.fetchone()
+    if result:
+        try:
+            student_role = discord.utils.get(member.guild.roles, name=is_student_role) 
+            if student_role:
+                await member.add_roles(student_role)
+                print(f'Assigned role to {member} upon joining.')
+            else:
+                print(f'Role "{is_student_role}" not found in guild "{member.guild.name}".')
+        except discord.Forbidden:
+            print(f'Failed to assign role to {member}, missing permissions.')
     
 
 # --- BOT COMMANDS ---
@@ -137,6 +152,8 @@ async def verify(ctx, code: str):
             
     else:
         await ctx.send(f'Invalid verification code, {ctx.author.mention}. Please try again.', delete_after=10)
+
+
 
 
 # --- RUN THE BOT ---
