@@ -59,6 +59,18 @@ async def on_message(message):
         c.execute("SELECT * FROM user_links WHERE discord_id = ?", (str(message.author.id),))
         if c.fetchone():
             await message.channel.send(f'You are already verified, {message.author.mention}.', delete_after=20)
+
+            # check if they have the role, and if not, assign it
+            try:
+                student_role = discord.utils.get(message.guild.roles, name=is_student_role) 
+                if student_role and student_role not in message.author.roles:
+                    await message.author.add_roles(student_role)
+                    print(f'Assigned role to {message.author} upon re-verification attempt.')
+                elif not student_role:
+                    print(f'Role "{is_student_role}" not found in guild "{message.guild.name}".')
+            except discord.Forbidden:
+                print(f'Failed to assign role to {message.author}, missing permissions.')
+
             return
         
         # Check if that UP number has already been used
