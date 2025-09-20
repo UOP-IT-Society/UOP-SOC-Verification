@@ -70,7 +70,7 @@ async def on_message(message):
                     print(f'Role "{is_student_role}" not found in guild "{message.guild.name}".')
             except discord.Forbidden:
                 print(f'Failed to assign role to {message.author}, missing permissions.')
-
+            await bot.process_commands(message)
             return
         
         # Check if that UP number has already been used
@@ -88,6 +88,7 @@ async def on_message(message):
                         await control_channel.send(f'**Alert:** The UP number `{upid}` was used in a duplicate verification attempt by {message.author} (`{message.author.id}`) in server **{message.guild.name}**. Please investigate.')
                 except Exception as e:
                     print(f"Could not send alert to control server: {e}")
+            await bot.process_commands(message)
             return
 
         # Check if the user is already pending to resend the same code.
@@ -117,6 +118,7 @@ async def on_message(message):
             )
         else:
             await message.channel.send(f'Failed to send verification email. Please contact an admin.', delete_after=30)
+    await bot.process_commands(message)
     
 
 # Check if this account has already been verified when joining a server
@@ -136,45 +138,43 @@ async def on_member_join(member):
             print(f'Failed to assign role to {member}, missing permissions.')
     
 
-# --- BOT COMMANDS ---
 @bot.command()
 async def verify(ctx, code: str):
+    await ctx.message.delete()
     """Verifies the user with the provided code."""
-    # Delete the command message (e.g., "!verify 123456")
-    try:
-        await ctx.message.delete()
-    except discord.Forbidden:
-        print(f"Failed to delete command message in {ctx.channel.name}, missing permissions.")
-
-    # If the command is NOT used in a verification channel, send an error and stop.
-    if not is_verification_channel(str(ctx.channel.id)):
-        await ctx.send("This command can only be used in the verification channel.", delete_after=10)
-        return
-
+    print(f"'{ctx.author}' initiated !verify command in channel '{ctx.channel.name}' with code '{code}'.") # DEBUG PRINT
+    
     # Check if the code is valid
-    c.execute("SELECT upid FROM pending_verifications WHERE discord_id = ? AND code = ?", (str(ctx.author.id), code.lower()))
+    c.execute("SELECT upid FROM pending_verifications WHERE discord_id = ? AND code = ?", (str(ctx.author.id), code))
     result = c.fetchone()
-
+    print(f"Database query result for verification: {result}") # DEBUG PRINT
     if result:
         upid = result[0]
-        # Move user from pending to verified
-        c.execute("INSERT OR REPLACE INTO user_links (discord_id, upid) VALUES (?, ?)", (str(ctx.author.id), upid))
-        c.execute("DELETE FROM pending_verifications WHERE discord_id = ?", (str(ctx.author.id),))
-        conn.commit()
-        
-        # Assign the role
         try:
-            student_role = discord.utils.get(ctx.guild.roles, name=is_student_role) 
+            # Add to verified users
+            c.execute("INSERT OR REPLACE INTO user_links (discord_id, upid) VALUES (?, ?)", (str(ctx.author.id), upid))
+            # Remove from pending verifications
+            c.execute("DELETE FROM pending_verifications WHERE discord_id = ?", (str(ctx.author.id),))
+            conn.commit()
+
+            # Assign the role
+            student_role = discord.utils.get(ctx.guild.roles, name=is_student_role)
             if student_role:
                 await ctx.author.add_roles(student_role)
-                await ctx.send(f'Verification successful! You have been given the `{student_role.name}` role, {ctx.author.mention}.', delete_after=20)
+                await ctx.send(f'Congratulations {ctx.author.mention}, you have been verified and assigned the `{student_role.name}` role!', delete_after=30)
             else:
-                await ctx.send(f'Verification successful, but I could not find the `{is_student_role}` role to assign. Please contact an admin.', delete_after=20)
+                await ctx.send(f'You have been verified, but the role `{is_student_role}` was not found. Please contact an admin.', delete_after=30)
+
+        except sqlite3.Error as e:
+            await ctx.send(f"A database error occurred: {e}", delete_after=30)
+            print(f"Database error during verification: {e}")
         except discord.Forbidden:
-            await ctx.send('Verification successful, but I lack the permissions to assign roles.', delete_after=20)
-            
+            await ctx.send("I have verified you in the database, but I don't have permissions to assign roles.", delete_after=30)
+        except Exception as e:
+            await ctx.send(f"An unexpected error occurred: {e}", delete_after=30)
+            print(f"Unexpected error during verification: {e}")
     else:
-        await ctx.send(f'Invalid verification code, {ctx.author.mention}. Please try again.', delete_after=10)
+        await ctx.send(f'Invalid verification code, {ctx.author.mention}. Please check the code and try again.', delete_after=30)
 
 
 @bot.command()
