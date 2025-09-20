@@ -90,11 +90,22 @@ async def on_message(message):
                     print(f"Could not send alert to control server: {e}")
             return
 
-        # Generate code and store it for verification
-        verify_code = os.urandom(3).hex() # 6-character hex code
-        c.execute("INSERT OR REPLACE INTO pending_verifications (discord_id, upid, code) VALUES (?, ?, ?)", (str(message.author.id), upid, verify_code))
-        conn.commit()
+        # Check if the user is already pending to resend the same code.
+        c.execute("SELECT code FROM pending_verifications WHERE discord_id = ?", (str(message.author.id),))
+        pending_user = c.fetchone()
 
+        if pending_user:
+            # User is already pending, use their existing code and update their UPID attempt
+            verify_code = pending_user[0]
+            c.execute("UPDATE pending_verifications SET upid = ? WHERE discord_id = ?", (upid, str(message.author.id)))
+            print(f"Resending existing verification code to {message.author} ({message.author.id}).")
+        else:
+            # New pending user, generate a new code
+            verify_code = os.urandom(3).hex() # 6-character hex code
+            c.execute("INSERT INTO pending_verifications (discord_id, upid, code) VALUES (?, ?, ?)", (str(message.author.id), upid, verify_code))
+            print(f"Generated new verification code for {message.author} ({message.author.id}).")
+        
+        conn.commit()
         # Send the verification email
         email_address = f"up{upid}@myport.ac.uk"
         if await send_email(email_address, verify_code, str(message.author), str(message.author.id)):
@@ -166,6 +177,53 @@ async def verify(ctx, code: str):
         await ctx.send(f'Invalid verification code, {ctx.author.mention}. Please try again.', delete_after=10)
 
 
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def updateverify(ctx, member: discord.Member, upid: str):
+    """Manually verifies a user or updates their UP number. (Admin only)"""
+    # Clean the input UPID to ensure it's just the numbers
+    cleaned_upid = upid.lower().replace("up", "").strip()
+    if not cleaned_upid.isdigit():
+        await ctx.send("Invalid UP number format. It should be, for example, `up123456` or `123456`.", delete_after=15)
+        return
+
+    try:
+        
+        c.execute("DELETE FROM user_links WHERE upid = ?", (cleaned_upid,))
+        c.execute("DELETE FROM pending_verifications WHERE discord_id = ?", (str(member.id),))
+        c.execute("INSERT OR REPLACE INTO user_links (discord_id, upid) VALUES (?, ?)", (str(member.id), cleaned_upid))
+        
+        conn.commit()
+
+        # --- Role Assignment ---
+        student_role = discord.utils.get(ctx.guild.roles, name=is_student_role)
+        if student_role:
+            await member.add_roles(student_role)
+            await ctx.send(f"Successfully verified {member.mention} with UP number `{cleaned_upid}` and assigned the `{student_role.name}` role.")
+        else:
+            await ctx.send(f"Successfully verified {member.mention} with UP number `{cleaned_upid}`, but the role `{is_student_role}` was not found.")
+
+    except sqlite3.Error as e:
+        await ctx.send(f"A database error occurred: {e}")
+        print(f"Database error during manual verification: {e}")
+    except discord.Forbidden:
+        await ctx.send("I have verified the user in the database, but I don't have permissions to assign roles.")
+    except Exception as e:
+        await ctx.send(f"An unexpected error occurred: {e}")
+        print(f"Unexpected error during manual verification: {e}")
+
+@updateverify.error
+async def updateverify_error(ctx, error):
+    """Error handler for the updateverify command."""
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("You do not have permission to use this command.", delete_after=10)
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send("Usage: `!updateverify <@member> <up_number>` (e.g., `!updateverify @JohnDoe up123456`)", delete_after=15)
+    elif isinstance(error, commands.MemberNotFound):
+        await ctx.send(f"Could not find the member: `{error.argument}`.", delete_after=15)
+    else:
+        print(f"An error occurred with the !updateverify command: {error}")
+        await ctx.send("An unexpected error occurred while running this command.", delete_after=10)
 
 
 # --- RUN THE BOT ---
