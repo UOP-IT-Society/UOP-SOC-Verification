@@ -140,7 +140,6 @@ async def on_member_join(member):
 
 @bot.command()
 async def verify(ctx, code: str):
-    await ctx.message.delete()
     """Verifies the user with the provided code."""
     print(f"'{ctx.author}' initiated !verify command in channel '{ctx.channel.name}' with code '{code}'.") # DEBUG PRINT
     
