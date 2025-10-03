@@ -52,8 +52,9 @@ async def on_message(message):
     except discord.Forbidden:
         print(f"Failed to delete message in {message.channel.name}, missing permissions.")
 
-    if message.content.startswith('up') and message.content[2:].isdigit():
-        upid = message.content.replace("up", "").strip()
+
+    if message.content.lower().startswith('up') and message.content[2:].isdigit():
+        upid = message.content.lower().replace("up", "").strip()
         
         # Check if the user is already verified
         c.execute("SELECT * FROM user_links WHERE discord_id = ?", (str(message.author.id),))
