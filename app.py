@@ -226,6 +226,29 @@ async def updateverify_error(ctx, error):
         await ctx.send("An unexpected error occurred while running this command.", delete_after=10)
 
 
+@bot.command()
+async def checkall(ctx):
+    """Checks and assigns the role in all servers the user is in."""
+    c.execute("SELECT upid FROM user_links WHERE discord_id = ?", (str(ctx.author.id),))
+    result = c.fetchone()
+    if result:
+        for guild in bot.guilds:
+            member = guild.get_member(ctx.author.id)
+            if member:
+                try:
+                    student_role = discord.utils.get(guild.roles, name=is_student_role)
+                    if student_role and student_role not in member.roles:
+                        await member.add_roles(student_role)
+                        print(f'Assigned role to {member} in guild "{guild.name}".')
+                    elif not student_role:
+                        print(f'Role "{is_student_role}" not found in guild "{guild.name}".')
+                except discord.Forbidden:
+                    print(f'Failed to assign role to {member} in guild "{guild.name}", missing permissions.')
+        await ctx.send(f'{ctx.author.mention}, your roles have been checked and updated across all servers you are in.', delete_after=30)
+    else:
+        await ctx.send(f'{ctx.author.mention}, you are not verified yet. Please verify first.', delete_after=30)
+
+
 # --- RUN THE BOT ---
 if __name__ == '__main__':
     load_dotenv()
