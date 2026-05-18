@@ -226,6 +226,208 @@ async def updateverify_error(ctx, error):
         await ctx.send("An unexpected error occurred while running this command.", delete_after=10)
 
 
+# --- UNVERIFY a single user ---
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def unverify(ctx, member: discord.Member):
+    """Removes a single user's verification and their student role. (Admin only)"""
+    c.execute("SELECT upid FROM user_links WHERE discord_id = ?", (str(member.id),))
+    result = c.fetchone()
+
+    c.execute("DELETE FROM user_links WHERE discord_id = ?", (str(member.id),))
+    c.execute("DELETE FROM pending_verifications WHERE discord_id = ?", (str(member.id),))
+    conn.commit()
+
+    student_role = discord.utils.get(ctx.guild.roles, name=is_student_role)
+    role_removed = False
+    if student_role and student_role in member.roles:
+        try:
+            await member.remove_roles(student_role)
+            role_removed = True
+        except discord.Forbidden:
+            await ctx.send(f"Removed from database but couldn't remove role — missing permissions.")
+
+    if result:
+        up = result[0]
+        await ctx.send(
+            f"Unverified {member.mention} (was UP`{up}`). "
+            f"{'Role removed.' if role_removed else 'Role was not assigned.'} They must re-verify."
+        )
+    else:
+        await ctx.send(f"{member.mention} had no verified entry. Any pending verification has also been cleared.")
+
+@unverify.error
+async def unverify_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("You do not have permission to use this command.", delete_after=10)
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send("Usage: `!unverify <@member>`", delete_after=15)
+    elif isinstance(error, commands.MemberNotFound):
+        await ctx.send(f"Could not find member: `{error.argument}`.", delete_after=15)
+    else:
+        await ctx.send("An unexpected error occurred.", delete_after=10)
+
+
+# --- LOOKUP: Discord user from UP number ---
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def getdiscord(ctx, upid: str):
+    """Looks up a Discord user by their UP number. (Admin only)"""
+    cleaned_upid = upid.lower().replace("up", "").strip()
+    if not cleaned_upid.isdigit():
+        await ctx.send("Invalid UP number format. Use e.g. `up123456` or `123456`.", delete_after=15)
+        return
+
+    c.execute("SELECT discord_id FROM user_links WHERE upid = ?", (cleaned_upid,))
+    result = c.fetchone()
+    if result:
+        discord_id = result[0]
+        member = ctx.guild.get_member(int(discord_id))
+        if member:
+            await ctx.send(f"UP`{cleaned_upid}` is linked to {member.mention} (`{discord_id}`).")
+        else:
+            await ctx.send(f"UP`{cleaned_upid}` is linked to Discord ID `{discord_id}` (user not found in this server).")
+    else:
+        await ctx.send(f"No verified user found for UP number `{cleaned_upid}`.", delete_after=15)
+
+@getdiscord.error
+async def getdiscord_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("You do not have permission to use this command.", delete_after=10)
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send("Usage: `!getdiscord <up_number>` (e.g., `!getdiscord up123456`)", delete_after=15)
+    else:
+        await ctx.send("An unexpected error occurred.", delete_after=10)
+
+
+# --- LOOKUP: UP number from Discord user ---
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def getup(ctx, member: discord.Member):
+    """Looks up the UP number linked to a Discord member. (Admin only)"""
+    c.execute("SELECT upid FROM user_links WHERE discord_id = ?", (str(member.id),))
+    result = c.fetchone()
+    if result:
+        await ctx.send(f"{member.mention} is verified with UP number `{result[0]}`.")
+    else:
+        # Check if they're pending
+        c.execute("SELECT upid FROM pending_verifications WHERE discord_id = ?", (str(member.id),))
+        pending = c.fetchone()
+        if pending:
+            await ctx.send(f"{member.mention} has a **pending** verification for UP number `{pending[0]}`.")
+        else:
+            await ctx.send(f"{member.mention} is not verified and has no pending verification.", delete_after=15)
+
+@getup.error
+async def getup_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("You do not have permission to use this command.", delete_after=10)
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send("Usage: `!getup <@member>`", delete_after=15)
+    elif isinstance(error, commands.MemberNotFound):
+        await ctx.send(f"Could not find member: `{error.argument}`.", delete_after=15)
+    else:
+        await ctx.send("An unexpected error occurred.", delete_after=10)
+
+
+# --- LIST PENDING VERIFICATIONS ---
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def pending(ctx):
+    """Lists all users with pending verifications. (Admin only)"""
+    c.execute("SELECT discord_id, upid FROM pending_verifications")
+    rows = c.fetchall()
+    if not rows:
+        await ctx.send("No pending verifications.", delete_after=15)
+        return
+
+    lines = []
+    for discord_id, upid in rows:
+        member = ctx.guild.get_member(int(discord_id))
+        name = member.mention if member else f"`{discord_id}`"
+        lines.append(f"- {name} → UP`{upid}`")
+
+    # Split into chunks to avoid Discord's 2000-char limit
+    chunk, chunks = "", []
+    for line in lines:
+        if len(chunk) + len(line) + 1 > 1900:
+            chunks.append(chunk)
+            chunk = line
+        else:
+            chunk = (chunk + "\n" + line) if chunk else line
+    if chunk:
+        chunks.append(chunk)
+
+    await ctx.send(f"**Pending verifications ({len(rows)}):**\n{chunks[0]}")
+    for extra in chunks[1:]:
+        await ctx.send(extra)
+
+@pending.error
+async def pending_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("You do not have permission to use this command.", delete_after=10)
+    else:
+        await ctx.send("An unexpected error occurred.", delete_after=10)
+
+
+# --- RESET DB: wipe all verifications and remove roles so everyone must re-verify ---
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def resetdb(ctx):
+    """Wipes all verified users and pending verifications, and removes the student role from everyone. (Admin only)"""
+    await ctx.send(
+        f"⚠️ **Are you sure?** This will:\n"
+        f"- Delete **all** verified users from the database\n"
+        f"- Delete **all** pending verifications\n"
+        f"- Remove the `{is_student_role}` role from every member in this server\n\n"
+        f"Everyone will need to re-verify. Reply `CONFIRM` within 30 seconds to proceed."
+    )
+
+    def check(m):
+        return m.author == ctx.author and m.channel == ctx.channel and m.content == "CONFIRM"
+
+    try:
+        await bot.wait_for("message", check=check, timeout=30.0)
+    except TimeoutError:
+        await ctx.send("Reset cancelled (timed out).", delete_after=15)
+        return
+
+    try:
+        c.execute("DELETE FROM user_links")
+        c.execute("DELETE FROM pending_verifications")
+        conn.commit()
+    except sqlite3.Error as e:
+        await ctx.send(f"Database error during reset: {e}")
+        print(f"Database error during resetdb: {e}")
+        return
+
+    student_role = discord.utils.get(ctx.guild.roles, name=is_student_role)
+    removed_count = 0
+    if student_role:
+        for member in ctx.guild.members:
+            if student_role in member.roles:
+                try:
+                    await member.remove_roles(student_role)
+                    removed_count += 1
+                except discord.Forbidden:
+                    print(f"Failed to remove role from {member}, missing permissions.")
+    else:
+        await ctx.send(f"Warning: role `{is_student_role}` not found in this server — could not remove roles.")
+
+    await ctx.send(
+        f"Reset complete. Database cleared. "
+        f"Removed `{is_student_role}` from {removed_count} member(s). "
+        f"Everyone must re-verify."
+    )
+
+@resetdb.error
+async def resetdb_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("You do not have permission to use this command.", delete_after=10)
+    else:
+        await ctx.send("An unexpected error occurred.", delete_after=10)
+
+
 # --- CHECK ALL MEMBERS across ALL SERVERS ---
 @bot.command()
 @commands.has_permissions(administrator=True)
